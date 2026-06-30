@@ -32,7 +32,9 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          # No third-party deps (no go.sum), so module caching saves nothing
+          # and would only warn on a missing dependency file.
+          cache: false
 
       - name: gofmt
         if: runner.os != 'Windows'
