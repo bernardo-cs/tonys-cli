@@ -1,0 +1,11 @@
+/tonys
+/dist/
+*.out
+*.test
+# never commit credentials or local state
+.envrc
+.env
+.env.*
+config.json
+token.json
+loudness.json

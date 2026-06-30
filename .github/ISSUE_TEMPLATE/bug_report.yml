@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in tonys doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please **never paste credentials, tokens, or
+        the contents of your token cache** into this form.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, and what happened instead?
+      placeholder: |
+        $ tonys upload "Erna-Tonie" song.mp3
+        ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact command(s). Add `--verbose` for more detail.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: tonys version
+      description: Output of `tonys version`
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: e.g. macOS 15 arm64, Ubuntu 24.04 amd64
+    validations:
+      required: true
+  - type: input
+    id: deps
+    attributes:
+      label: ffmpeg / yt-dlp versions (if relevant)
+      description: Output of `tonys doctor`
+    validations:
+      required: false

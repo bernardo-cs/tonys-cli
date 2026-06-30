@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest an improvement or a new command/flag
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the use case, especially any automation/agent scenario.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A command, flag, or behavior you have in mind (sketch the CLI usage).
+    validations:
+      required: false

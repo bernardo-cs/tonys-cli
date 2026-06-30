@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tonys — agent-friendly CLI for the TonieCloud API</title>
+<meta name="description" content="An agent-friendly command-line wrapper around the TonieCloud API. Send audio from files, stdin, or YouTube to your kids' creative tonies, with automatic conversion and loudness normalization.">
+<meta property="og:title" content="tonys — agent-friendly CLI for the TonieCloud API">
+<meta property="og:description" content="Send audio from files, stdin, or YouTube to your creative tonies — built for scripts, bots, and agents.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>">
+<style>
+  :root {
+    --bg: #0f1115;
+    --bg-soft: #161922;
+    --card: #1b1f2a;
+    --line: #2a2f3d;
+    --text: #e7e9ee;
+    --muted: #9aa3b2;
+    --accent: #ff8a5b;
+    --accent-2: #6ea8fe;
+    --code-bg: #0b0d12;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre, .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  header.hero {
+    padding: 96px 0 72px;
+    background:
+      radial-gradient(1200px 400px at 50% -10%, rgba(255,138,91,0.16), transparent 60%),
+      radial-gradient(900px 400px at 80% 10%, rgba(110,168,254,0.12), transparent 55%);
+    border-bottom: 1px solid var(--line);
+    text-align: center;
+  }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-bottom: 22px; }
+  .pill {
+    font-size: 12px; color: var(--muted); border: 1px solid var(--line);
+    padding: 4px 11px; border-radius: 999px; background: var(--bg-soft);
+  }
+  h1 { font-size: clamp(44px, 8vw, 76px); margin: 0; letter-spacing: -2px; font-weight: 800; }
+  h1 .dot { color: var(--accent); }
+  .tag { font-size: clamp(17px, 2.6vw, 21px); color: var(--muted); max-width: 640px; margin: 16px auto 0; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+  .btn {
+    display: inline-block; padding: 12px 22px; border-radius: 10px; font-weight: 600;
+    border: 1px solid var(--line); color: var(--text); background: var(--card);
+  }
+  .btn:hover { text-decoration: none; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); color: #1a0f08; border-color: var(--accent); }
+  .btn.primary:hover { filter: brightness(1.06); }
+
+  .install-quick {
+    margin: 30px auto 0; max-width: 440px;
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .install-quick code { color: var(--text); font-size: 14px; }
+  .install-quick .prompt { color: var(--accent); }
+
+  section { padding: 64px 0; border-bottom: 1px solid var(--line); }
+  h2 { font-size: clamp(26px, 4vw, 34px); letter-spacing: -0.5px; margin: 0 0 8px; }
+  .lead { color: var(--muted); margin: 0 0 28px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 22px;
+  }
+  .card h3 { margin: 0 0 6px; font-size: 17px; }
+  .card h3 .ic { color: var(--accent); margin-right: 8px; }
+  .card p { margin: 0; color: var(--muted); font-size: 14.5px; }
+
+  pre {
+    background: var(--code-bg); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.7;
+  }
+  pre .c { color: var(--muted); }       /* comment */
+  pre .p { color: var(--accent); }      /* prompt / command name */
+  pre .s { color: #9ece6a; }            /* string */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
+
+  table.cmd { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  table.cmd td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.cmd td:first-child { white-space: nowrap; color: var(--accent); width: 1%; padding-right: 22px; }
+  table.cmd td:first-child code { color: var(--accent); }
+
+  .note { font-size: 13.5px; color: var(--muted); background: var(--bg-soft);
+    border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 8px; padding: 14px 16px; }
+
+  footer { padding: 48px 0 64px; color: var(--muted); font-size: 13.5px; text-align: center; }
+  footer a { color: var(--muted); text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badge-row">
+      <span class="pill">Go · single binary</span>
+      <span class="pill">JSON output</span>
+      <span class="pill">Built for agents &amp; bots</span>
+      <span class="pill">MIT licensed</span>
+    </div>
+    <h1>tonys<span class="dot">.</span></h1>
+    <p class="tag">An agent-friendly command-line wrapper around the <strong>TonieCloud</strong> API.
+      Send audio — local files, stdin, or YouTube links — to your kids' creative tonies,
+      with automatic format conversion and loudness normalization.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/bernardo-cs/tonys-cli">View on GitHub</a>
+      <a class="btn" href="https://github.com/bernardo-cs/tonys-cli/releases/latest">Download</a>
+      <a class="btn" href="#install">Install</a>
+    </div>
+    <div class="install-quick mono">
+      <code><span class="prompt">$</span> brew install bernardo-cs/tap/tonys</code>
+    </div>
+  </div>
+</header>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Why "agent-friendly"?</h2>
+    <p class="lead">Designed to be driven by scripts, bots, and LLM agents — not just humans.</p>
+    <div class="grid">
+      <div class="card">
+        <h3><span class="ic">◆</span>Stable JSON everywhere</h3>
+        <p><code>--json</code> on any command. Clean data on stdout, structured errors on stderr — pipe straight into <code>jq</code>.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">◆</span>Meaningful exit codes</h3>
+        <p><code>0</code> ok · <code>2</code> usage · <code>3</code> auth · <code>4</code> not-found · <code>1</code> other. Branch on failures reliably.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">◆</span>Self-describing</h3>
+        <p><code>tonys schema</code> emits a JSON tree of every command and flag, so tools can introspect the whole CLI.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">◆</span>Non-interactive auth</h3>
+        <p>Credentials from env vars; the token is cached <code>0600</code> and auto-refreshed. No prompts, ever.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">◆</span>Nothing out of reach</h3>
+        <p><code>tonys raw &lt;METHOD&gt; &lt;path&gt;</code> hits any endpoint directly when a convenience command doesn't exist yet.</p>
+      </div>
+      <div class="card">
+        <h3><span class="ic">◆</span>Audio pipeline built in</h3>
+        <p>Auto-convert unsupported formats with ffmpeg and EBU R128 loudness-normalize so chapters don't jump in volume.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p class="lead">A self-contained Go binary — no runtime to install.</p>
+    <div class="cols">
+      <div>
+        <p class="mono" style="color:var(--muted)">Homebrew (macOS / Linux)</p>
+        <pre><span class="p">brew</span> install bernardo-cs/tap/tonys</pre>
+        <p class="mono" style="color:var(--muted)">With Go</p>
+        <pre><span class="p">go</span> install github.com/bernardo-cs/tonys-cli/cmd/tonys@latest</pre>
+      </div>
+      <div>
+        <p class="mono" style="color:var(--muted)">Prebuilt binary</p>
+        <pre><span class="c"># grab a tarball from Releases, verify, install</span>
+<span class="p">curl</span> -fsSLO .../tonys_0.1.0_darwin_arm64.tar.gz
+<span class="p">shasum</span> -a 256 -c checksums.txt --ignore-missing
+<span class="p">tar</span> xzf tonys_0.1.0_darwin_arm64.tar.gz
+<span class="p">sudo</span> mv tonys /usr/local/bin/</pre>
+      </div>
+    </div>
+    <p class="note"><strong>Linux packages:</strong> native <code>.deb</code>, <code>.rpm</code>, and
+      <code>.apk</code> builds (amd64 &amp; arm64) are attached to every
+      <a href="https://github.com/bernardo-cs/tonys-cli/releases/latest">release</a> —
+      <code>apt&nbsp;install ./tonys_*.deb</code>, <code>dnf&nbsp;install ./tonys_*.rpm</code>, …</p>
+    <p class="note"><strong>Optional tools:</strong> <code>ffmpeg</code> (conversion &amp; normalization) and
+      <code>yt-dlp</code> (YouTube import) are not bundled — install them only if you need those features.
+      Run <code>tonys doctor</code> to check your environment.</p>
+  </div>
+</section>
+
+<section id="usage">
+  <div class="wrap">
+    <h2>Quick start</h2>
+    <p class="lead">Tables by default; add <code>--json</code> for machine output.</p>
+    <pre><span class="c"># point it at your own account</span>
+<span class="p">export</span> TONIE_USERNAME=<span class="s">"you@example.com"</span> TONIE_PASSWORD=<span class="s">"secret"</span>
+
+<span class="p">tonys</span> tonie list
+<span class="p">tonys</span> upload <span class="s">"Erna-Tonie"</span> bedtime.mp3 --title <span class="s">"Bedtime story"</span> --wait
+
+<span class="c"># pipe from stdin, normalize to a consistent volume</span>
+<span class="p">cat</span> song.mp3 | <span class="p">tonys</span> upload <span class="s">"Erna-Tonie"</span> - --normalize match
+
+<span class="c"># import from YouTube (needs yt-dlp)</span>
+<span class="p">tonys</span> yt <span class="s">"Erna-Tonie"</span> <span class="s">"https://youtu.be/XXXX"</span>
+
+<span class="c"># discover the whole interface as JSON</span>
+<span class="p">tonys</span> schema | <span class="p">jq</span> .</pre>
+  </div>
+</section>
+
+<section id="commands">
+  <div class="wrap">
+    <h2>Commands</h2>
+    <p class="lead"><code>tonys schema</code> is the always-current reference; here's the human summary.</p>
+    <table class="cmd">
+      <tr><td><code>me</code> / <code>config</code></td><td>the logged-in user · backend config &amp; upload limits</td></tr>
+      <tr><td><code>auth</code></td><td>login / status / logout — manage the cached token</td></tr>
+      <tr><td><code>household list</code></td><td>list households</td></tr>
+      <tr><td><code>tonie</code></td><td>list / get / rename creative tonies</td></tr>
+      <tr><td><code>upload</code></td><td>upload a file (or <code>-</code>) as a new chapter — the main command</td></tr>
+      <tr><td><code>chapter</code></td><td>list / add / add-existing / rm / rename / move / sort / clear</td></tr>
+      <tr><td><code>yt</code></td><td>import a YouTube video or playlist (needs yt-dlp)</td></tr>
+      <tr><td><code>loudness</code></td><td>measure files / inspect the per-tonie loudness ledger</td></tr>
+      <tr><td><code>raw</code></td><td>call any TonieCloud endpoint directly</td></tr>
+      <tr><td><code>doctor</code></td><td>check dependencies, credentials and writable paths</td></tr>
+      <tr><td><code>schema</code></td><td>machine-readable description of all commands</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>tonys</strong> is an unofficial tool. Not affiliated with, endorsed by, or supported by
+      Boxine GmbH / tonies. "tonies", "TonieCloud" and "Toniebox" are trademarks of their respective owners.
+      Use your own account, at your own risk.</p>
+    <p>
+      <a href="https://github.com/bernardo-cs/tonys-cli">GitHub</a> ·
+      <a href="https://github.com/bernardo-cs/tonys-cli/blob/main/README.md">README</a> ·
+      <a href="https://github.com/bernardo-cs/tonys-cli/blob/main/LICENSE">MIT License</a> ·
+      Ported from <a href="https://github.com/alexhartm/tonie_api">alexhartm/tonie_api</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
