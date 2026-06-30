@@ -68,8 +68,10 @@ func TestRequireHTTPURL(t *testing.T) {
 
 func TestSoleAudioFileMetacharDir(t *testing.T) {
 	// A temp dir whose name contains glob metacharacters must not break lookup.
+	// "[abc]" is a glob character class (which would defeat filepath.Glob) yet is
+	// a legal filename on every OS — unlike "*"/"?", which Windows forbids.
 	base := t.TempDir()
-	dir := filepath.Join(base, "item-[abc]*")
+	dir := filepath.Join(base, "item-[abc]")
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
