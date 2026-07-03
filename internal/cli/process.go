@@ -22,15 +22,17 @@ var processFlags = []FlagSpec{
 	{Name: "bitrate", Usage: "target bitrate when converting", Default: "128k"},
 	{Name: "normalize", Usage: "loudness normalize: off|target|match", Default: "off"},
 	{Name: "target-lufs", Usage: "integrated loudness target (LUFS)", Default: "-16"},
+	{Name: "skip", Usage: "skip the first duration of audio (e.g. 30s, 1m30s)"},
 }
 
 // processSpec is the resolved processing configuration.
 type processSpec struct {
-	convert    string
-	format     string
-	bitrate    string
-	normalize  string
-	targetLUFS float64
+	convert     string
+	format      string
+	bitrate     string
+	normalize   string
+	targetLUFS  float64
+	skipSeconds float64
 }
 
 func processSpecFromFlags(fs *flag.FlagSet) (processSpec, error) {
@@ -56,6 +58,13 @@ func processSpecFromFlags(fs *flag.FlagSet) (processSpec, error) {
 		return s, usageErr("--target-lufs must be a number (LUFS), got %q", tl)
 	}
 	s.targetLUFS = v
+	if skip := fstr(fs, "skip"); skip != "" {
+		d, derr := time.ParseDuration(skip)
+		if derr != nil || d < 0 {
+			return s, usageErr("--skip must be a non-negative duration (e.g. 30s, 1m30s), got %q", skip)
+		}
+		s.skipSeconds = d.Seconds()
+	}
 	return s, nil
 }
 
@@ -79,7 +88,7 @@ func (s processSpec) normalizeOn() bool { return s.normalize == "target" || s.no
 
 // needsFFmpeg reports whether the spec forces processing regardless of input.
 func (s processSpec) forcesProcessing() bool {
-	return s.convert == "always" || s.normalizeOn()
+	return s.convert == "always" || s.normalizeOn() || s.skipSeconds > 0
 }
 
 // prepareForUpload converts and/or normalizes inputPath as the spec dictates,
@@ -123,10 +132,11 @@ func (a *App) prepareForUpload(ctx context.Context, t toniecloud.CreativeTonie, 
 	}
 
 	res, err := conv.Process(ctx, inputPath, audio.ProcessOptions{
-		Format:     format,
-		Bitrate:    s.bitrate,
-		Normalize:  s.normalizeOn(),
-		TargetLUFS: target,
+		Format:      format,
+		Bitrate:     s.bitrate,
+		Normalize:   s.normalizeOn(),
+		TargetLUFS:  target,
+		SkipSeconds: s.skipSeconds,
 	})
 	if err != nil {
 		return "", func() {}, nil, err

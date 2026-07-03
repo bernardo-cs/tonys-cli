@@ -24,7 +24,7 @@ func ytCommand() *Command {
 		Args:    "<tonie> <url>",
 		Long: `Download the audio of a video — or every item of a playlist — and add each as
 a chapter on the tonie. Items flow through the same convert/normalize pipeline
-as upload, so --convert and --normalize apply. Requires yt-dlp on PATH.
+as upload, so --convert, --normalize and --skip apply. Requires yt-dlp on PATH.
 
 YouTube radio URLs such as watch?v=...&list=RD...&start_radio=1 can expand to
 large auto-generated playlists. By default tonys asks whether to import just the
@@ -35,6 +35,7 @@ Examples:
   tonys yt "Erna-Tonie" "https://youtu.be/XXXX"
   tonys yt "Erna-Tonie" "https://youtube.com/playlist?list=YYYY" --normalize target
   tonys yt "Erna-Tonie" URL --limit 5 --title-prefix "Mix: " --wait
+  tonys yt "Erna-Tonie" URL --skip 30s
   tonys yt "Erna-Tonie" RADIO_URL --allow-radio`,
 		Flags: append([]FlagSpec{
 			{Name: "household", Usage: "limit lookup to a household (id or name)"},

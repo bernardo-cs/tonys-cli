@@ -20,6 +20,11 @@ type ProcessOptions struct {
 	TargetLUFS float64
 	TruePeak   float64
 	LRA        float64
+
+	// SkipSeconds trims this many seconds from the start of the input before
+	// encoding. Both the loudness-measure pass and the encode pass skip the
+	// same offset so normalization is computed on the kept audio only.
+	SkipSeconds float64
 }
 
 // ProcessResult describes the produced file.
@@ -61,7 +66,7 @@ func (c *Converter) Process(ctx context.Context, inputPath string, opts ProcessO
 	// Build the audio filter chain.
 	var filters []string
 	if opts.Normalize {
-		stats, err := c.measure(ctx, inputPath, opts.TargetLUFS, opts.TruePeak, opts.LRA)
+		stats, err := c.measure(ctx, inputPath, opts.TargetLUFS, opts.TruePeak, opts.LRA, opts.SkipSeconds)
 		if err != nil {
 			return ProcessResult{Cleanup: noop}, err
 		}
@@ -92,7 +97,11 @@ func (c *Converter) Process(ctx context.Context, inputPath string, opts ProcessO
 	res.OutputPath = outPath
 	res.Cleanup = func() { os.Remove(outPath) }
 
-	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", inputPath, "-vn"}
+	args := []string{"-y", "-hide_banner", "-loglevel", "error"}
+	if opts.SkipSeconds > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.3f", opts.SkipSeconds))
+	}
+	args = append(args, "-i", inputPath, "-vn")
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}

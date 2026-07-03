@@ -101,7 +101,8 @@ until TonieCloud finishes transcoding.
 Examples:
   tonys upload "Erna-Tonie" bedtime.mp3
   tonys upload 9B5AC304E0 story.mp3 --title "Bedtime story" --wait
-  cat song.mp3 | tonys upload "Erna-Tonie" - --title "Song"`,
+  cat song.mp3 | tonys upload "Erna-Tonie" - --title "Song"
+  tonys upload "Erna-Tonie" podcast.mp3 --skip 1m30s`,
 		Flags: uploadFlags,
 		Run:   uploadRun,
 	}

@@ -223,16 +223,23 @@ else is **auto-converted with ffmpeg** before upload. Controls (on `upload`,
 --convert auto|always|never          # default auto (convert only unsupported inputs)
 --format mp3|opus|ogg|m4a|flac|wav   # target codec when converting (default mp3)
 --bitrate 128k
+--skip 30s                           # trim this many seconds from the start
 ```
 
 ```sh
 tonys upload "Erna-Tonie" voice-memo.webm   # webm → mp3 automatically
+tonys upload "Erna-Tonie" podcast.mp3 --skip 1m30s   # drop 30-second intro
 ```
 
 `--format` only takes effect when a conversion actually happens. With
 `--convert auto` (the default), an already-accepted input is uploaded as-is and
 keeps its original format; with `--normalize` on, a re-encode is required, so the
 file is encoded to `--format` (default mp3).
+
+`--skip` accepts any Go duration string (`30s`, `1m30s`, `2m`, …) and trims that
+many seconds from the start before upload. It forces an ffmpeg pass even for
+already-accepted formats. Loudness normalization, when combined, is measured and
+applied only on the kept audio.
 
 ## Loudness normalization
 
@@ -288,7 +295,7 @@ tonys yt "Erna-Tonie" "https://youtube.com/playlist?list=YYYY" \
 
 Each item is downloaded (yt-dlp), run through the same convert/normalize
 pipeline, and added as a chapter. Useful flags: `--limit N`, `--reverse`,
-`--title-prefix`, `--position`, `--wait` / `--wait-timeout`, and
+`--title-prefix`, `--position`, `--skip`, `--wait` / `--wait-timeout`, and
 `--continue-on-error` (default on) which keeps going if one item fails and
 reports failures in the summary.
 
