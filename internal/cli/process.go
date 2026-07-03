@@ -23,16 +23,18 @@ var processFlags = []FlagSpec{
 	{Name: "normalize", Usage: "loudness normalize: off|target|match", Default: "off"},
 	{Name: "target-lufs", Usage: "integrated loudness target (LUFS)", Default: "-16"},
 	{Name: "skip", Usage: "skip the first duration of audio (e.g. 30s, 1m30s)"},
+	{Name: "skip-end", Usage: "skip the last duration of audio (e.g. 30s, 1m30s)"},
 }
 
 // processSpec is the resolved processing configuration.
 type processSpec struct {
-	convert     string
-	format      string
-	bitrate     string
-	normalize   string
-	targetLUFS  float64
-	skipSeconds float64
+	convert        string
+	format         string
+	bitrate        string
+	normalize      string
+	targetLUFS     float64
+	skipSeconds    float64
+	skipEndSeconds float64
 }
 
 func processSpecFromFlags(fs *flag.FlagSet) (processSpec, error) {
@@ -65,6 +67,13 @@ func processSpecFromFlags(fs *flag.FlagSet) (processSpec, error) {
 		}
 		s.skipSeconds = d.Seconds()
 	}
+	if skip := fstr(fs, "skip-end"); skip != "" {
+		d, derr := time.ParseDuration(skip)
+		if derr != nil || d < 0 {
+			return s, usageErr("--skip-end must be a non-negative duration (e.g. 30s, 1m30s), got %q", skip)
+		}
+		s.skipEndSeconds = d.Seconds()
+	}
 	return s, nil
 }
 
@@ -88,7 +97,7 @@ func (s processSpec) normalizeOn() bool { return s.normalize == "target" || s.no
 
 // needsFFmpeg reports whether the spec forces processing regardless of input.
 func (s processSpec) forcesProcessing() bool {
-	return s.convert == "always" || s.normalizeOn() || s.skipSeconds > 0
+	return s.convert == "always" || s.normalizeOn() || s.skipSeconds > 0 || s.skipEndSeconds > 0
 }
 
 // prepareForUpload converts and/or normalizes inputPath as the spec dictates,
@@ -132,11 +141,12 @@ func (a *App) prepareForUpload(ctx context.Context, t toniecloud.CreativeTonie, 
 	}
 
 	res, err := conv.Process(ctx, inputPath, audio.ProcessOptions{
-		Format:      format,
-		Bitrate:     s.bitrate,
-		Normalize:   s.normalizeOn(),
-		TargetLUFS:  target,
-		SkipSeconds: s.skipSeconds,
+		Format:         format,
+		Bitrate:        s.bitrate,
+		Normalize:      s.normalizeOn(),
+		TargetLUFS:     target,
+		SkipSeconds:    s.skipSeconds,
+		SkipEndSeconds: s.skipEndSeconds,
 	})
 	if err != nil {
 		return "", func() {}, nil, err

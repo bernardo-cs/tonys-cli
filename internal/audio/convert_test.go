@@ -67,6 +67,29 @@ func TestExtOf(t *testing.T) {
 	}
 }
 
+func TestParseDurationLine(t *testing.T) {
+	cases := []struct {
+		input   string
+		want    float64
+		wantOK  bool
+	}{
+		{"  Duration: 00:03:45.67, start: 0.000, bitrate: 192 kb/s\n", 225.67, true},
+		{"  Duration: 01:00:00.00, ...", 3600, true},
+		{"  Duration: 00:00:30.500, ...", 30.5, true},
+		{"no duration here", 0, false},
+	}
+	for _, c := range cases {
+		got, ok := parseDurationLine(c.input)
+		if ok != c.wantOK {
+			t.Errorf("parseDurationLine(%q) ok=%v want %v", c.input, ok, c.wantOK)
+			continue
+		}
+		if ok && (got < c.want-0.01 || got > c.want+0.01) {
+			t.Errorf("parseDurationLine(%q) = %v, want %v", c.input, got, c.want)
+		}
+	}
+}
+
 func TestParseLoudnormJSON(t *testing.T) {
 	stderr := `some ffmpeg noise
 [Parsed_loudnorm_0 @ 0x]

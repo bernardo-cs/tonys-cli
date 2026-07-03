@@ -224,11 +224,14 @@ else is **auto-converted with ffmpeg** before upload. Controls (on `upload`,
 --format mp3|opus|ogg|m4a|flac|wav   # target codec when converting (default mp3)
 --bitrate 128k
 --skip 30s                           # trim this many seconds from the start
+--skip-end 10s                       # trim this many seconds from the end
 ```
 
 ```sh
 tonys upload "Erna-Tonie" voice-memo.webm   # webm → mp3 automatically
-tonys upload "Erna-Tonie" podcast.mp3 --skip 1m30s   # drop 30-second intro
+tonys upload "Erna-Tonie" podcast.mp3 --skip 1m30s          # drop intro
+tonys upload "Erna-Tonie" podcast.mp3 --skip-end 30s        # drop outro
+tonys upload "Erna-Tonie" podcast.mp3 --skip 1m --skip-end 30s  # both
 ```
 
 `--format` only takes effect when a conversion actually happens. With
@@ -236,10 +239,10 @@ tonys upload "Erna-Tonie" podcast.mp3 --skip 1m30s   # drop 30-second intro
 keeps its original format; with `--normalize` on, a re-encode is required, so the
 file is encoded to `--format` (default mp3).
 
-`--skip` accepts any Go duration string (`30s`, `1m30s`, `2m`, …) and trims that
-many seconds from the start before upload. It forces an ffmpeg pass even for
-already-accepted formats. Loudness normalization, when combined, is measured and
-applied only on the kept audio.
+`--skip` and `--skip-end` accept any Go duration string (`30s`, `1m30s`, `2m`, …)
+and trim that many seconds from the start or end respectively. Both force an ffmpeg
+pass even for already-accepted formats. When combined with loudness normalization,
+the measure and encode passes both operate on the same trimmed window.
 
 ## Loudness normalization
 

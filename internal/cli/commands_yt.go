@@ -35,7 +35,7 @@ Examples:
   tonys yt "Erna-Tonie" "https://youtu.be/XXXX"
   tonys yt "Erna-Tonie" "https://youtube.com/playlist?list=YYYY" --normalize target
   tonys yt "Erna-Tonie" URL --limit 5 --title-prefix "Mix: " --wait
-  tonys yt "Erna-Tonie" URL --skip 30s
+  tonys yt "Erna-Tonie" URL --skip 30s --skip-end 30s
   tonys yt "Erna-Tonie" RADIO_URL --allow-radio`,
 		Flags: append([]FlagSpec{
 			{Name: "household", Usage: "limit lookup to a household (id or name)"},

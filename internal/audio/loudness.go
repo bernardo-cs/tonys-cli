@@ -41,10 +41,12 @@ type loudnormJSON struct {
 // Measure returns the integrated loudness (LUFS), true peak and loudness range
 // of a file using a single loudnorm analysis pass.
 func (c *Converter) Measure(ctx context.Context, inputPath string) (LoudnessStats, error) {
-	return c.measure(ctx, inputPath, DefaultTargetLUFS, DefaultTruePeak, DefaultLRA, 0)
+	return c.measure(ctx, inputPath, DefaultTargetLUFS, DefaultTruePeak, DefaultLRA, 0, 0)
 }
 
-func (c *Converter) measure(ctx context.Context, inputPath string, target, tp, lra, skipSeconds float64) (LoudnessStats, error) {
+// measure runs the loudnorm analysis pass over the window [skipSeconds,
+// skipSeconds+encodeDur). encodeDur=0 means "to the end".
+func (c *Converter) measure(ctx context.Context, inputPath string, target, tp, lra, skipSeconds, encodeDur float64) (LoudnessStats, error) {
 	if !c.Available() {
 		return LoudnessStats{}, errFFmpegMissing
 	}
@@ -56,7 +58,11 @@ func (c *Converter) measure(ctx context.Context, inputPath string, target, tp, l
 	if skipSeconds > 0 {
 		args = append(args, "-ss", fmt.Sprintf("%.3f", skipSeconds))
 	}
-	args = append(args, "-i", inputPath, "-vn", "-af", filter, "-f", "null", "-")
+	args = append(args, "-i", inputPath, "-vn")
+	if encodeDur > 0 {
+		args = append(args, "-t", fmt.Sprintf("%.3f", encodeDur))
+	}
+	args = append(args, "-af", filter, "-f", "null", "-")
 
 	cmd := exec.CommandContext(ctx, c.FFmpegPath, args...)
 	var stderr strings.Builder

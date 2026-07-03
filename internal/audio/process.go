@@ -25,6 +25,11 @@ type ProcessOptions struct {
 	// encoding. Both the loudness-measure pass and the encode pass skip the
 	// same offset so normalization is computed on the kept audio only.
 	SkipSeconds float64
+
+	// SkipEndSeconds trims this many seconds from the end of the input before
+	// encoding. Requires probing the file duration; both the measure pass and
+	// the encode pass use the same trimmed window.
+	SkipEndSeconds float64
 }
 
 // ProcessResult describes the produced file.
@@ -63,10 +68,26 @@ func (c *Converter) Process(ctx context.Context, inputPath string, opts ProcessO
 
 	res := ProcessResult{Cleanup: noop, Format: ext, Converted: true}
 
+	// Compute output duration when an end-trim is requested. This probe runs
+	// before both passes so they operate on the same trimmed window.
+	var encodeDur float64
+	if opts.SkipEndSeconds > 0 {
+		total, err := c.probeDuration(ctx, inputPath)
+		if err != nil {
+			return ProcessResult{Cleanup: noop}, err
+		}
+		encodeDur = total - opts.SkipSeconds - opts.SkipEndSeconds
+		if encodeDur <= 0 {
+			return ProcessResult{Cleanup: noop}, fmt.Errorf(
+				"--skip (%.3fs) + --skip-end (%.3fs) exceeds file duration (%.3fs)",
+				opts.SkipSeconds, opts.SkipEndSeconds, total)
+		}
+	}
+
 	// Build the audio filter chain.
 	var filters []string
 	if opts.Normalize {
-		stats, err := c.measure(ctx, inputPath, opts.TargetLUFS, opts.TruePeak, opts.LRA, opts.SkipSeconds)
+		stats, err := c.measure(ctx, inputPath, opts.TargetLUFS, opts.TruePeak, opts.LRA, opts.SkipSeconds, encodeDur)
 		if err != nil {
 			return ProcessResult{Cleanup: noop}, err
 		}
@@ -102,6 +123,9 @@ func (c *Converter) Process(ctx context.Context, inputPath string, opts ProcessO
 		args = append(args, "-ss", fmt.Sprintf("%.3f", opts.SkipSeconds))
 	}
 	args = append(args, "-i", inputPath, "-vn")
+	if encodeDur > 0 {
+		args = append(args, "-t", fmt.Sprintf("%.3f", encodeDur))
+	}
 	if len(filters) > 0 {
 		args = append(args, "-af", strings.Join(filters, ","))
 	}

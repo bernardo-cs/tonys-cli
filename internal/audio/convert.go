@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -192,6 +193,45 @@ func TargetExtension(format string) string {
 		return "mp3"
 	}
 	return ext
+}
+
+// probeDuration returns the duration of inputPath in seconds by running
+// ffmpeg -i and parsing the "Duration:" line from its stderr. The command
+// always exits non-zero (no output specified), which is expected.
+func (c *Converter) probeDuration(ctx context.Context, inputPath string) (float64, error) {
+	cmd := exec.CommandContext(ctx, c.FFmpegPath, "-hide_banner", "-i", inputPath)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	cmd.Run() // non-zero exit is expected; ignore it
+	if d, ok := parseDurationLine(stderr.String()); ok {
+		return d, nil
+	}
+	return 0, fmt.Errorf("could not determine duration of %q", inputPath)
+}
+
+// parseDurationLine extracts the duration (in seconds) from an ffmpeg stderr
+// string containing a line like "  Duration: 00:03:45.67, ...".
+func parseDurationLine(s string) (float64, bool) {
+	i := strings.Index(s, "Duration: ")
+	if i < 0 {
+		return 0, false
+	}
+	s = s[i+len("Duration: "):]
+	if j := strings.IndexAny(s, ",\n"); j >= 0 {
+		s = s[:j]
+	}
+	s = strings.TrimSpace(s)
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 {
+		return 0, false
+	}
+	h, e1 := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
+	m, e2 := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
+	sec, e3 := strconv.ParseFloat(strings.TrimSpace(parts[2]), 64)
+	if e1 != nil || e2 != nil || e3 != nil {
+		return 0, false
+	}
+	return h*3600 + m*60 + sec, true
 }
 
 var errFFmpegMissing = fmt.Errorf("ffmpeg not found: install it (e.g. `brew install ffmpeg`) or set $TONYS_FFMPEG")
