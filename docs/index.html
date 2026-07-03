@@ -157,7 +157,7 @@
       </div>
       <div class="card">
         <h3><span class="ic">◆</span>Audio pipeline built in</h3>
-        <p>Auto-convert unsupported formats with ffmpeg and EBU R128 loudness-normalize so chapters don't jump in volume.</p>
+        <p>Auto-convert unsupported formats with ffmpeg, EBU R128 loudness-normalize so chapters don't jump in volume, and auto-trim the intro/outro jingles playlists stamp on every video — detected by pure signal analysis, no AI.</p>
       </div>
     </div>
   </div>
@@ -209,6 +209,9 @@
 <span class="c"># import from YouTube (needs yt-dlp)</span>
 <span class="p">tonys</span> yt <span class="s">"Erna-Tonie"</span> <span class="s">"https://youtu.be/XXXX"</span>
 
+<span class="c"># import a playlist, cutting the intro/outro jingles every video shares</span>
+<span class="p">tonys</span> yt <span class="s">"Erna-Tonie"</span> <span class="s">"https://youtube.com/playlist?list=YYYY"</span> --auto-trim
+
 <span class="c"># discover the whole interface as JSON</span>
 <span class="p">tonys</span> schema | <span class="p">jq</span> .</pre>
   </div>
@@ -225,7 +228,8 @@
       <tr><td><code>tonie</code></td><td>list / get / rename creative tonies</td></tr>
       <tr><td><code>upload</code></td><td>upload a file (or <code>-</code>) as a new chapter — the main command</td></tr>
       <tr><td><code>chapter</code></td><td>list / add / add-existing / rm / rename / move / sort / clear</td></tr>
-      <tr><td><code>yt</code></td><td>import a YouTube video or playlist (needs yt-dlp)</td></tr>
+      <tr><td><code>yt</code></td><td>import a YouTube video or playlist (needs yt-dlp), optionally auto-trimming shared intros/outros</td></tr>
+      <tr><td><code>intro</code> / <code>outro</code></td><td>detect shared intro/closing jingles in local audio files, offline</td></tr>
       <tr><td><code>loudness</code></td><td>measure files / inspect the per-tonie loudness ledger</td></tr>
       <tr><td><code>raw</code></td><td>call any TonieCloud endpoint directly</td></tr>
       <tr><td><code>doctor</code></td><td>check dependencies, credentials and writable paths</td></tr>

@@ -2,7 +2,6 @@ package audio
 
 import (
 	"context"
-	"encoding/binary"
 	"math"
 	"os"
 	"path/filepath"
@@ -13,28 +12,12 @@ import (
 // sineWAV writes a mono 16-bit 11025 Hz sine-tone WAV of the given length.
 func sineWAV(t *testing.T, path string, seconds float64) {
 	t.Helper()
-	const rate = 11025
-	n := int(seconds * rate)
-	data := make([]byte, 44+2*n)
-	copy(data, "RIFF")
-	binary.LittleEndian.PutUint32(data[4:], uint32(36+2*n))
-	copy(data[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(data[16:], 16)
-	binary.LittleEndian.PutUint16(data[20:], 1)
-	binary.LittleEndian.PutUint16(data[22:], 1)
-	binary.LittleEndian.PutUint32(data[24:], rate)
-	binary.LittleEndian.PutUint32(data[28:], rate*2)
-	binary.LittleEndian.PutUint16(data[32:], 2)
-	binary.LittleEndian.PutUint16(data[34:], 16)
-	copy(data[36:], "data")
-	binary.LittleEndian.PutUint32(data[40:], uint32(2*n))
-	for i := 0; i < n; i++ {
-		s := 0.5 * math.Sin(2*math.Pi*440*float64(i)/rate)
-		binary.LittleEndian.PutUint16(data[44+2*i:], uint16(int16(s*32767)))
+	n := int(seconds * fpSampleRate)
+	pcm := make([]int16, n)
+	for i := range pcm {
+		pcm[i] = int16(0.5 * math.Sin(2*math.Pi*440*float64(i)/fpSampleRate) * 32767)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeWAV(t, path, pcm, fpSampleRate)
 }
 
 func TestProcessRejectsTrimBeyondDuration(t *testing.T) {

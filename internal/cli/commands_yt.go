@@ -24,7 +24,18 @@ func ytCommand() *Command {
 		Args:    "<tonie> <url>",
 		Long: `Download the audio of a video — or every item of a playlist — and add each as
 a chapter on the tonie. Items flow through the same convert/normalize pipeline
-as upload, so --convert, --normalize and --skip apply. Requires yt-dlp on PATH.
+as upload, so --convert, --normalize and --skip/--skip-end apply. Requires
+yt-dlp on PATH.
+
+Playlists often stamp the same intro (and sometimes a closing jingle) on every
+video. --trim-intro/--trim-outro detect and cut those with pure signal
+analysis: "common" matches the audio all items share at that end and is solid
+evidence; "spectral" finds where a single file's spectrum changes character
+and is a heuristic. "auto" uses common for playlists, but on a single video it
+only reports what it found — cutting on the spectral heuristic requires opting
+in explicitly. --auto-trim enables both ends at once. Detection downloads the
+whole batch before uploading; per-item cuts are added on top of
+--skip/--skip-end.
 
 YouTube radio URLs such as watch?v=...&list=RD...&start_radio=1 can expand to
 large auto-generated playlists. By default tonys asks whether to import just the
@@ -36,8 +47,10 @@ Examples:
   tonys yt "Erna-Tonie" "https://youtube.com/playlist?list=YYYY" --normalize target
   tonys yt "Erna-Tonie" URL --limit 5 --title-prefix "Mix: " --wait
   tonys yt "Erna-Tonie" URL --skip 30s --skip-end 30s
+  tonys yt "Erna-Tonie" PLAYLIST_URL --trim-intro auto
+  tonys yt "Erna-Tonie" PLAYLIST_URL --auto-trim
   tonys yt "Erna-Tonie" RADIO_URL --allow-radio`,
-		Flags: append([]FlagSpec{
+		Flags: append(append([]FlagSpec{
 			{Name: "household", Usage: "limit lookup to a household (id or name)"},
 			{Name: "limit", Usage: "max items to import (0 = all)", Default: "0"},
 			{Name: "title-prefix", Usage: "prefix added to each chapter title"},
@@ -47,15 +60,17 @@ Examples:
 			{Name: "wait-timeout", Usage: "max time to wait for transcoding (with --wait)", Default: "10m"},
 			{Name: "continue-on-error", Usage: "keep going if an item fails", Default: "true", Bool: true},
 			{Name: "allow-radio", Usage: "suppress the YouTube radio playlist warning", Bool: true},
-		}, processFlags...),
+		}, trimFlags...), processFlags...),
 		Run: ytRun,
 	}
 }
 
 type ytAdded struct {
-	Title  string `json:"title"`
-	FileID string `json:"fileId"`
-	Source string `json:"source"`
+	Title               string  `json:"title"`
+	FileID              string  `json:"fileId"`
+	Source              string  `json:"source"`
+	IntroTrimmedSeconds float64 `json:"introTrimmedSeconds,omitempty"`
+	OutroTrimmedSeconds float64 `json:"outroTrimmedSeconds,omitempty"`
 }
 
 type ytFailed struct {
@@ -74,6 +89,10 @@ func ytRun(ctx context.Context, a *App, fs *flag.FlagSet, args []string) error {
 		return err
 	}
 	spec, err := processSpecFromFlags(fs)
+	if err != nil {
+		return err
+	}
+	trim, err := trimSpecFromFlags(fs)
 	if err != nil {
 		return err
 	}
@@ -123,6 +142,10 @@ func ytRun(ctx context.Context, a *App, fs *flag.FlagSet, args []string) error {
 	}
 	a.info("Found %d item(s) to import", len(items))
 
+	if len(items) < 2 && (trim.intro.mode == "common" || trim.outro.mode == "common") {
+		return usageErr("common trim mode compares playlist items against each other and needs at least two; use auto or spectral for a single video")
+	}
+
 	tmpDir, err := os.MkdirTemp("", "tonys-yt-*")
 	if err != nil {
 		return err
@@ -134,22 +157,30 @@ func ytRun(ctx context.Context, a *App, fs *flag.FlagSet, args []string) error {
 	var added []ytAdded
 	var failed []ytFailed
 	var prs []*audio.ProcessResult
+	var report *trimReport
 
-	for i, item := range items {
-		title := prefix + item.Title
-		a.info("(%d/%d) %s", i+1, len(items), item.Title)
-
-		res, pr, ierr := a.importOne(ctx, t, yt, item, tmpDir, title, spec)
-		if ierr != nil {
-			a.info("  ! failed: %v", ierr)
-			failed = append(failed, ytFailed{Title: item.Title, URL: item.URL, Error: ierr.Error()})
-			if keepGoing {
-				continue
-			}
-			return ierr
+	if trim.enabled() {
+		added, failed, prs, report, err = a.ytImportTrimmed(ctx, t, yt, items, tmpDir, prefix, keepGoing, spec, trim)
+		if err != nil {
+			return err
 		}
-		added = append(added, ytAdded{Title: title, FileID: res.FileID, Source: item.URL})
-		prs = append(prs, pr)
+	} else {
+		for i, item := range items {
+			title := prefix + item.Title
+			a.info("(%d/%d) %s", i+1, len(items), item.Title)
+
+			res, pr, ierr := a.importOne(ctx, t, yt, item, tmpDir, title, spec)
+			if ierr != nil {
+				a.info("  ! failed: %v", ierr)
+				failed = append(failed, ytFailed{Title: item.Title, URL: item.URL, Error: ierr.Error()})
+				if keepGoing {
+					continue
+				}
+				return ierr
+			}
+			added = append(added, ytAdded{Title: title, FileID: res.FileID, Source: item.URL})
+			prs = append(prs, pr)
+		}
 	}
 
 	updated := t
@@ -186,6 +217,9 @@ func ytRun(ctx context.Context, a *App, fs *flag.FlagSet, args []string) error {
 		"failed":     failed,
 		"addedCount": len(added),
 	}
+	if report != nil {
+		summary["trim"] = report
+	}
 	return a.emit(summary, func(w io.Writer) {
 		fmt.Fprintf(w, "Imported %d/%d item(s) into %q\n", len(added), len(items), t.Name)
 		for _, f := range failed {
@@ -203,7 +237,12 @@ func (a *App) importOne(ctx context.Context, t toniecloud.CreativeTonie, yt *ytd
 		return toniecloud.UploadResult{}, nil, derr
 	}
 	defer os.Remove(path)
+	return a.processAndUpload(ctx, t, path, title, spec)
+}
 
+// processAndUpload runs a downloaded file through the processing pipeline and
+// uploads the result.
+func (a *App) processAndUpload(ctx context.Context, t toniecloud.CreativeTonie, path, title string, spec processSpec) (toniecloud.UploadResult, *audio.ProcessResult, error) {
 	ppath, cleanup, pr, perr := a.prepareForUpload(ctx, t, path, spec)
 	if perr != nil {
 		return toniecloud.UploadResult{}, nil, perr
@@ -215,6 +254,113 @@ func (a *App) importOne(ctx context.Context, t toniecloud.CreativeTonie, yt *ytd
 		return toniecloud.UploadResult{}, nil, uerr
 	}
 	return res, pr, nil
+}
+
+// trimReport summarizes intro/outro auto-trimming for the JSON output. The
+// Suggested fields carry boundaries that were detected but NOT cut (suggest
+// mode: auto on a single video), so automation sees them even though the
+// human hint only goes to stderr.
+type trimReport struct {
+	IntroMode             string  `json:"introMode,omitempty"`
+	IntroSeconds          float64 `json:"introSeconds,omitempty"`
+	IntroSuggestedSeconds float64 `json:"introSuggestedSeconds,omitempty"`
+	OutroMode             string  `json:"outroMode,omitempty"`
+	OutroSeconds          float64 `json:"outroSeconds,omitempty"`
+	OutroSuggestedSeconds float64 `json:"outroSuggestedSeconds,omitempty"`
+}
+
+// ytImportTrimmed imports items in three phases — download everything, detect
+// intro/outro cuts across the batch, then process + upload each item with its
+// cuts folded into --skip/--skip-end. Cross-file detection is why the whole
+// batch must be on disk before the first upload.
+func (a *App) ytImportTrimmed(ctx context.Context, t toniecloud.CreativeTonie, yt *ytdl.Client, items []ytdl.Item, tmpDir, prefix string, keepGoing bool, spec processSpec, trim trimSpec) (added []ytAdded, failed []ytFailed, prs []*audio.ProcessResult, report *trimReport, err error) {
+	conv := audio.NewConverter()
+	if !conv.Available() {
+		return nil, nil, nil, nil, fmt.Errorf("--trim-intro/--trim-outro require ffmpeg; install it (e.g. `brew install ffmpeg`) or set $TONYS_FFMPEG")
+	}
+	introMode := resolveTrimMode(trim.intro.mode, len(items))
+	outroMode := resolveTrimMode(trim.outro.mode, len(items))
+	report = &trimReport{IntroMode: introMode, OutroMode: outroMode}
+
+	type dlItem struct {
+		item  ytdl.Item
+		title string
+		path  string
+	}
+	var dls []dlItem
+	for i, item := range items {
+		a.info("(%d/%d) downloading %s", i+1, len(items), item.Title)
+		path, derr := yt.DownloadAudio(ctx, item, tmpDir)
+		if derr != nil {
+			a.info("  ! failed: %v", derr)
+			failed = append(failed, ytFailed{Title: item.Title, URL: item.URL, Error: derr.Error()})
+			if !keepGoing {
+				return added, failed, prs, report, derr
+			}
+			continue
+		}
+		dls = append(dls, dlItem{item: item, title: prefix + item.Title, path: path})
+	}
+
+	introCuts := make([]float64, len(dls))
+	outroCuts := make([]float64, len(dls))
+	paths := make([]string, len(dls))
+	for i, d := range dls {
+		paths[i] = d.path
+	}
+	if introMode != "off" && len(dls) > 0 {
+		var detected float64
+		introCuts, detected = a.detectTrimCuts(ctx, conv, paths, trim.intro, introMode, "intro")
+		if introMode == "suggest" {
+			report.IntroSuggestedSeconds = round2(detected)
+		} else {
+			report.IntroSeconds = round2(detected)
+		}
+	}
+	if outroMode != "off" && len(dls) > 0 {
+		var detected float64
+		outroCuts, detected = a.detectTrimCuts(ctx, conv, paths, trim.outro, outroMode, "outro")
+		if outroMode == "suggest" {
+			report.OutroSuggestedSeconds = round2(detected)
+		} else {
+			report.OutroSeconds = round2(detected)
+		}
+	}
+
+	for i, d := range dls {
+		a.info("(%d/%d) %s", i+1, len(dls), d.item.Title)
+		switch {
+		case introCuts[i] > 0 && outroCuts[i] > 0:
+			a.info("  trimming %.1fs intro + %.1fs outro", introCuts[i], outroCuts[i])
+		case introCuts[i] > 0:
+			a.info("  trimming %.1fs intro", introCuts[i])
+		case outroCuts[i] > 0:
+			a.info("  trimming %.1fs outro", outroCuts[i])
+		}
+		specI := spec
+		specI.skipSeconds += introCuts[i]
+		specI.skipEndSeconds += outroCuts[i]
+
+		res, pr, uerr := a.processAndUpload(ctx, t, d.path, d.title, specI)
+		os.Remove(d.path)
+		if uerr != nil {
+			a.info("  ! failed: %v", uerr)
+			failed = append(failed, ytFailed{Title: d.item.Title, URL: d.item.URL, Error: uerr.Error()})
+			if !keepGoing {
+				return added, failed, prs, report, uerr
+			}
+			continue
+		}
+		added = append(added, ytAdded{
+			Title:               d.title,
+			FileID:              res.FileID,
+			Source:              d.item.URL,
+			IntroTrimmedSeconds: round2(introCuts[i]),
+			OutroTrimmedSeconds: round2(outroCuts[i]),
+		})
+		prs = append(prs, pr)
+	}
+	return added, failed, prs, report, nil
 }
 
 func atoiDefault(s string, def int) int {

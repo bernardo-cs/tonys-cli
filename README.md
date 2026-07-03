@@ -167,6 +167,8 @@ and flag. A human summary:
 | `upload <tonie> <file>` | upload a file (or `-`) as a new chapter |
 | `chapter list\|add\|add-existing\|rm\|rename\|move\|sort\|clear` | edit chapters |
 | `yt <tonie> <url>` | import a YouTube video/playlist (needs yt-dlp) |
+| `intro detect <file>...` | find a shared (or spectral) intro in local files |
+| `outro detect <file>...` | find a shared (or spectral) closing in local files |
 | `loudness measure\|show\|measure-tonie` | loudness tooling (see below) |
 | `file create` | low-level: request a presigned upload slot |
 | `raw <METHOD> <path>` | call any endpoint directly |
@@ -298,7 +300,8 @@ tonys yt "Erna-Tonie" "https://youtube.com/playlist?list=YYYY" \
 
 Each item is downloaded (yt-dlp), run through the same convert/normalize
 pipeline, and added as a chapter. Useful flags: `--limit N`, `--reverse`,
-`--title-prefix`, `--position`, `--skip`, `--wait` / `--wait-timeout`, and
+`--title-prefix`, `--position`, `--skip` / `--skip-end`, `--wait` / `--wait-timeout`,
+`--trim-intro` / `--trim-outro` / `--auto-trim` (see below), and
 `--continue-on-error` (default on) which keeps going if one item fails and
 reports failures in the summary.
 
@@ -307,6 +310,49 @@ large auto-generated playlists. `tonys yt` warns when it sees one and asks
 whether to import only the current video or the whole radio playlist. Choosing
 the current video cleans the URL before download; pass `--allow-radio` to skip
 the prompt when you intended to import the radio playlist.
+
+### Automatic intro & outro trimming
+
+Many playlists stamp the same channel intro — and sometimes a closing jingle —
+on every video. `tonys` can find and cut those with **pure signal analysis**
+(spectral fingerprints compared across files; no AI, no network):
+
+```sh
+tonys yt "Erna-Tonie" PLAYLIST_URL --trim-intro auto     # cut the shared intro
+tonys yt "Erna-Tonie" PLAYLIST_URL --trim-outro auto     # cut the shared closing
+tonys yt "Erna-Tonie" PLAYLIST_URL --auto-trim           # both at once
+```
+
+Modes for `--trim-intro` / `--trim-outro`:
+
+- **`common`** — fingerprint every downloaded item and measure the exact audio
+  prefix (or suffix) the batch shares, then cut it per item. Items that lack
+  the jingle are left untouched, duplicated songs can't fool the consensus,
+  and a short pause between the jingle and the content (up to ~3s) is trimmed
+  with it. This is cross-file *evidence* and is what `auto` uses for playlists.
+- **`spectral`** — single-file heuristic: find the point where the average
+  spectrum before differs most from the audio after, and cut only when the
+  candidate jingle is both sharply bounded and internally uniform. Real songs
+  can still fool it (a fade-out or a distinct first section looks similar), so
+  it never runs implicitly: with `auto` on a single video, `tonys` only
+  *reports* the suspected boundary and leaves the audio alone until you opt in
+  with `spectral` or cut manually with `--skip`/`--skip-end`.
+
+Bounds: `--intro-max`/`--outro-max` (default `1m`) limit how long a jingle may
+be, `--intro-min`/`--outro-min` (default `1s`) how short. Detected cuts are
+added on top of any manual `--skip`/`--skip-end`. Note that trimming downloads
+the whole batch before the first upload, since common mode needs all items on
+disk to compare them.
+
+The same detection is available offline for local files — handy to preview
+what would be cut, or to feed `--skip`/`--skip-end` yourself:
+
+```sh
+tonys intro detect *.mp3            # per-file cut points + shared intro length
+tonys outro detect *.mp3            # same, measured from the end of each file
+tonys intro detect --mode spectral song.mp3   # single-file heuristic, with score
+tonys intro detect *.webm --max 30s --json    # machine-readable
+```
 
 ## Using it from an agent / script
 

@@ -4,8 +4,9 @@
 
 `tonys` is an agent-friendly Go CLI for the TonieCloud API. It lets scripts and
 bots inspect households/creative tonies, edit chapters, upload audio from files
-or stdin, import YouTube audio, and optionally convert or loudness-normalize
-audio before upload.
+or stdin, import YouTube audio, and optionally convert, loudness-normalize or
+trim audio before upload — including automatic detection of the intro/outro
+jingles playlist items share (spectral fingerprinting, no AI).
 
 The CLI is designed for automation:
 - stable JSON output via `--json` / `TONYS_OUTPUT=json`
@@ -23,8 +24,9 @@ This project is not affiliated with Boxine / tonies.de.
   loudness ledger, and CLI tests.
 - `internal/toniecloud`: TonieCloud API client, auth/session/token cache,
   upload handling, models, and client tests.
-- `internal/audio`: ffmpeg-backed conversion and EBU R128 loudness measurement /
-  normalization.
+- `internal/audio`: ffmpeg-backed conversion, EBU R128 loudness measurement /
+  normalization, and spectral fingerprinting with shared intro/outro detection
+  (`fingerprint.go`, `intro.go`; pure Go FFT in `fft.go`).
 - `internal/ytdl`: yt-dlp integration for YouTube imports.
 - `README.md`: user-facing behavior and command reference.
 - `Makefile`: common build/test/vet/fmt targets.

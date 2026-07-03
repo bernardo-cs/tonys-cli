@@ -19,6 +19,8 @@ func rootCommands() []*Command {
 		uploadCommand(),
 		chapterCommand(),
 		ytCommand(),
+		introCommand(),
+		outroCommand(),
 		loudnessCommand(),
 		fileCommand(),
 		rawCommand(),
