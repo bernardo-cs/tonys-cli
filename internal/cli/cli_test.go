@@ -2,13 +2,71 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"encoding/binary"
 	"flag"
+	"math"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/bernardo-cs/tonys-cli/internal/audio"
 	"github.com/bernardo-cs/tonys-cli/internal/toniecloud"
 )
+
+// writeToneWAV writes a mono 16-bit 11025 Hz WAV of a two-tone signal, loud
+// enough to never count as silence in audio analysis.
+func writeToneWAV(t *testing.T, path string, seconds float64) {
+	t.Helper()
+	const rate = 11025
+	n := int(seconds * rate)
+	data := make([]byte, 44+2*n)
+	copy(data, "RIFF")
+	binary.LittleEndian.PutUint32(data[4:], uint32(36+2*n))
+	copy(data[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(data[16:], 16)
+	binary.LittleEndian.PutUint16(data[20:], 1)
+	binary.LittleEndian.PutUint16(data[22:], 1)
+	binary.LittleEndian.PutUint32(data[24:], rate)
+	binary.LittleEndian.PutUint32(data[28:], rate*2)
+	binary.LittleEndian.PutUint16(data[32:], 2)
+	binary.LittleEndian.PutUint16(data[34:], 16)
+	copy(data[36:], "data")
+	binary.LittleEndian.PutUint32(data[40:], uint32(2*n))
+	for i := 0; i < n; i++ {
+		ts := float64(i) / rate
+		s := 0.4*math.Sin(2*math.Pi*523*ts) + 0.3*math.Sin(2*math.Pi*911*ts)
+		binary.LittleEndian.PutUint16(data[44+2*i:], uint16(int16(s*32767)))
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrepareForUploadHonorsSkipOnAcceptedFormats(t *testing.T) {
+	// Regression: an already-accepted format with no convert/normalize used
+	// to be returned as-is, silently dropping --skip/--skip-end.
+	conv := audio.NewConverter()
+	if !conv.Available() {
+		t.Skip("ffmpeg not available")
+	}
+	var buf bytes.Buffer
+	a := &App{Output: "json", Stdout: &buf, Stderr: &buf, Quiet: true}
+	path := filepath.Join(t.TempDir(), "in.wav")
+	writeToneWAV(t, path, 3)
+
+	spec := processSpec{convert: "auto", normalize: "off", skipSeconds: 1}
+	out, cleanup, _, err := a.prepareForUpload(context.Background(), toniecloud.CreativeTonie{}, path, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if out == path {
+		t.Fatal("--skip was dropped: input returned unprocessed")
+	}
+}
 
 // buildFS mirrors how runCommand constructs a leaf flag set.
 func buildFS(a *App, specs []FlagSpec) *flag.FlagSet {

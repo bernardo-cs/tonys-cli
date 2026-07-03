@@ -68,19 +68,28 @@ func (c *Converter) Process(ctx context.Context, inputPath string, opts ProcessO
 
 	res := ProcessResult{Cleanup: noop, Format: ext, Converted: true}
 
-	// Compute output duration when an end-trim is requested. This probe runs
-	// before both passes so they operate on the same trimmed window.
+	// Validate the trim window whenever anything is trimmed: ffmpeg happily
+	// seeks past the end of the input and produces an empty (but valid)
+	// file, which would then be uploaded. The probe result also feeds -t
+	// for end-trims, so both passes operate on the same trimmed window.
 	var encodeDur float64
-	if opts.SkipEndSeconds > 0 {
+	if opts.SkipSeconds > 0 || opts.SkipEndSeconds > 0 {
 		total, err := c.probeDuration(ctx, inputPath)
-		if err != nil {
+		switch {
+		case err != nil && opts.SkipEndSeconds > 0:
+			// An end-trim cannot be applied without knowing the duration.
 			return ProcessResult{Cleanup: noop}, err
-		}
-		encodeDur = total - opts.SkipSeconds - opts.SkipEndSeconds
-		if encodeDur <= 0 {
-			return ProcessResult{Cleanup: noop}, fmt.Errorf(
-				"--skip (%.3fs) + --skip-end (%.3fs) exceeds file duration (%.3fs)",
-				opts.SkipSeconds, opts.SkipEndSeconds, total)
+		case err == nil:
+			remaining := total - opts.SkipSeconds - opts.SkipEndSeconds
+			if remaining <= 0 {
+				return ProcessResult{Cleanup: noop}, fmt.Errorf(
+					"trim window (%.1fs from the start + %.1fs from the end) leaves nothing of the %.1fs input",
+					opts.SkipSeconds, opts.SkipEndSeconds, total)
+			}
+			if opts.SkipEndSeconds > 0 {
+				encodeDur = remaining
+			}
+			// A start-only trim needs no -t: ffmpeg reads to the end.
 		}
 	}
 

@@ -60,21 +60,27 @@ func processSpecFromFlags(fs *flag.FlagSet) (processSpec, error) {
 		return s, usageErr("--target-lufs must be a number (LUFS), got %q", tl)
 	}
 	s.targetLUFS = v
-	if skip := fstr(fs, "skip"); skip != "" {
-		d, derr := time.ParseDuration(skip)
-		if derr != nil || d < 0 {
-			return s, usageErr("--skip must be a non-negative duration (e.g. 30s, 1m30s), got %q", skip)
-		}
-		s.skipSeconds = d.Seconds()
+	if s.skipSeconds, err = trimDurFlag(fs, "skip"); err != nil {
+		return s, err
 	}
-	if skip := fstr(fs, "skip-end"); skip != "" {
-		d, derr := time.ParseDuration(skip)
-		if derr != nil || d < 0 {
-			return s, usageErr("--skip-end must be a non-negative duration (e.g. 30s, 1m30s), got %q", skip)
-		}
-		s.skipEndSeconds = d.Seconds()
+	if s.skipEndSeconds, err = trimDurFlag(fs, "skip-end"); err != nil {
+		return s, err
 	}
 	return s, nil
+}
+
+// trimDurFlag parses a trim-duration flag (--skip/--skip-end) into seconds;
+// empty means no trim.
+func trimDurFlag(fs *flag.FlagSet, name string) (float64, error) {
+	v := fstr(fs, name)
+	if v == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d < 0 {
+		return 0, usageErr("--%s must be a non-negative duration (e.g. 30s, 1m30s), got %q", name, v)
+	}
+	return d.Seconds(), nil
 }
 
 func orDefault(v, def string) string {
@@ -90,6 +96,19 @@ func durFlag(fs *flag.FlagSet, name string, def time.Duration) time.Duration {
 		return d
 	}
 	return def
+}
+
+// positiveDurFlag parses a duration flag that must be > 0; empty uses def.
+func positiveDurFlag(fs *flag.FlagSet, name string, def time.Duration) (time.Duration, error) {
+	v := fstr(fs, name)
+	if v == "" {
+		return def, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, usageErr("--%s must be a positive duration (e.g. 30s, 1m), got %q", name, v)
+	}
+	return d, nil
 }
 
 // normalizeOn reports whether any loudness normalization is requested.
@@ -117,7 +136,7 @@ func (a *App) prepareForUpload(ctx context.Context, t toniecloud.CreativeTonie, 
 		needConvert = !accepted
 	}
 
-	if !needConvert && !s.normalizeOn() {
+	if !needConvert && !s.normalizeOn() && s.skipSeconds <= 0 && s.skipEndSeconds <= 0 {
 		return inputPath, func() {}, nil, nil // upload as-is
 	}
 

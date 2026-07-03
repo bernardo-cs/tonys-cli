@@ -69,9 +69,9 @@ func TestExtOf(t *testing.T) {
 
 func TestParseDurationLine(t *testing.T) {
 	cases := []struct {
-		input   string
-		want    float64
-		wantOK  bool
+		input  string
+		want   float64
+		wantOK bool
 	}{
 		{"  Duration: 00:03:45.67, start: 0.000, bitrate: 192 kb/s\n", 225.67, true},
 		{"  Duration: 01:00:00.00, ...", 3600, true},
